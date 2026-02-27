@@ -34,7 +34,7 @@ def haversine(coord1, coord2):
 # -----------------------------
 # LOAD INPUT DATA
 # -----------------------------
-with open("test.json", "r") as f:
+with open("../member1/output_data.json", "r") as f:
     data = json.load(f)
 
 if not data:
