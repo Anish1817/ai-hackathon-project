@@ -2,6 +2,11 @@ import sqlite3
 
 DB_NAME = "metadata.db"
 
+import sqlite3
+import os
+
+BASE_DIR = os.path.dirname(__file__)
+DB_NAME = os.path.join(BASE_DIR, "metadata.db")
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
