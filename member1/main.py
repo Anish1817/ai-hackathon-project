@@ -1,13 +1,9 @@
 import os
 import json
-# from exif_utils import extract_metadata
-# from database import insert_image, fetch_all
-from .exif_utils import extract_metadata
-# from .database import insert_image, fetch_all
-from .database import insert_image, fetch_all, init_db
-from member2.cluster import call_member2
+from exif_utils import extract_metadata
+from database import insert_image, fetch_all, init_db
 
-def process_folder(folder_path="member1/images"):
+def process_folder(folder_path="images"):
     if not os.path.exists(folder_path):
         print("Folder not found.")
         return
@@ -32,7 +28,7 @@ def process_folder(folder_path="member1/images"):
 
         # 2️⃣ If EXIF missing → Use Vision
         if not metadata:
-            from .vision_utils import get_location_from_image
+            from vision_utils import get_location_from_image
             location = get_location_from_image(file_path)
 
             if location:
@@ -79,15 +75,11 @@ def export_json():
             "timestamp": row[3]
         })
 
-    with open("member1/output_data.json", "w") as f:
+    with open("output_data.json", "w") as f:
         json.dump(data, f, indent=4)
 
     print("output_data.json generated successfully")
 
-init_db()
-process_folder()
-call_member2()
-
-
-
-
+if __name__ == "__main__":
+    init_db()
+    process_folder()

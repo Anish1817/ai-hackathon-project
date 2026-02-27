@@ -50,7 +50,7 @@ def load_points():
             f"Missing data: expected {MEMBER2_POINTS} or {MEMBER1_POINTS}"
         )
 
-    points = sorted(points, key=lambda x: x["timestamp"])
+    points = sorted(points, key=lambda x: x.get("timestamp") or "9999")
     return points
 
 
@@ -174,8 +174,31 @@ def build_summary(points, intel: dict, clusters_meta: dict) -> dict:
     intel_summary = intel.get("summary", {})
     total_distance_km = float(intel_summary.get("total_distance_km", compute_total_distance_km(points)))
 
-    # Date range and avg daily distance
-    timestamps = [datetime.fromisoformat(p["timestamp"]) for p in points]
+    # Date range and avg daily distance (filter out None timestamps)
+    timestamps = []
+    for p in points:
+        ts = p.get("timestamp")
+        if ts:
+            try:
+                timestamps.append(datetime.fromisoformat(ts))
+            except (ValueError, TypeError):
+                pass
+
+    if not timestamps:
+        return {
+            "total_locations": len(points),
+            "total_distance_km": round(total_distance_km, 2),
+            "avg_daily_distance_km": 0.0,
+            "most_visited_place": "N/A",
+            "inferred_home": "N/A",
+            "inferred_work": "N/A",
+            "most_active_hour": "N/A",
+            "most_active_day": "N/A",
+            "night_movement_pct": 0.0,
+            "anomalies_detected": 0,
+            "date_range": "N/A",
+        }
+
     timestamps_sorted = sorted(timestamps)
     first_ts = timestamps_sorted[0]
     last_ts = timestamps_sorted[-1]

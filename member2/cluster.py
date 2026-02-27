@@ -1,31 +1,28 @@
 import json
 import numpy as np
 from sklearn.cluster import DBSCAN
-from member3.member3_movement import call_member3
 from math import radians, sin, cos, sqrt, atan2
 import os
 
-BASE_DIR = os.path.dirname(__file__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(BASE_DIR)
 
 POINTS_OUTPUT = os.path.join(BASE_DIR, "points_with_clusters.json")
 CLUSTERS_OUTPUT = os.path.join(BASE_DIR, "clusters.json")
+INPUT_FILE = os.path.join(ROOT_DIR, "member1", "output_data.json")
+
 # -----------------------------
 # SETTINGS
 # -----------------------------
-INPUT_FILE = "output_data.json"
-# POINTS_OUTPUT = "points_with_clusters.json"
-# CLUSTERS_OUTPUT = "clusters.json"
-
 EPS_KM = 0.5        # 500 meters clustering radius
 MIN_SAMPLES = 3     # Minimum points to form a cluster
 EARTH_RADIUS = 6371
 
 
-# -----------------------------
-# HAVERSINE DISTANCE FUNCTION
-# -----------------------------
-
 def call_member2():
+    # -----------------------------
+    # HAVERSINE DISTANCE FUNCTION
+    # -----------------------------
     def haversine(coord1, coord2):
         lat1, lon1 = radians(coord1[0]), radians(coord1[1])
         lat2, lon2 = radians(coord2[0]), radians(coord2[1])
@@ -38,11 +35,10 @@ def call_member2():
 
         return EARTH_RADIUS * c
 
-
     # -----------------------------
     # LOAD INPUT DATA
     # -----------------------------
-    with open("member1/output_data.json", "r") as f:
+    with open(INPUT_FILE, "r") as f:
         data = json.load(f)
 
     if not data:
@@ -87,11 +83,8 @@ def call_member2():
     # -----------------------------
     # SAVE points_with_clusters.json
     # -----------------------------
-    # with open(POINTS_OUTPUT, "w") as f:
-    #     json.dump(valid_points, f, indent=4)
     with open(POINTS_OUTPUT, "w") as f:
         json.dump(valid_points, f, indent=4)
-
 
     # -----------------------------
     # BUILD CLUSTER SUMMARY
@@ -135,9 +128,9 @@ def call_member2():
                 cluster_summary[j]["center"]
             )
             if d > max_distance:
-             max_distance = d
+                max_distance = d
 
-# -----------------------------
+    # -----------------------------
     # SAVE clusters.json
     # -----------------------------
     final_clusters = {
@@ -146,13 +139,6 @@ def call_member2():
         "movement_radius_km": round(max_distance, 2)
     }
 
-    # with open(CLUSTERS_OUTPUT, "w") as f:
-    #     json.dump(final_clusters, f, indent=4)
-
-    # old 
-
-
-
     with open(CLUSTERS_OUTPUT, "w") as f:
         json.dump(final_clusters, f, indent=4)
 
@@ -160,5 +146,7 @@ def call_member2():
     print("Files generated:")
     print("-", POINTS_OUTPUT)
     print("-", CLUSTERS_OUTPUT)
-    call_member3()
 
+
+if __name__ == "__main__":
+    call_member2()
