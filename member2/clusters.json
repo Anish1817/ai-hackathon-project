@@ -1,0 +1,14 @@
+{
+    "clusters": [
+        {
+            "cluster_id": 0,
+            "center": [
+                17.3851,
+                78.4868
+            ],
+            "visits": 3
+        }
+    ],
+    "noise_points": 1,
+    "movement_radius_km": 0
+}

@@ -1,0 +1,30 @@
+[
+    {
+        "image_id": "img_01",
+        "lat": 17.385,
+        "lon": 78.4867,
+        "timestamp": "2024-07-21T10:32:00",
+        "cluster_id": 0
+    },
+    {
+        "image_id": "img_02",
+        "lat": 17.3851,
+        "lon": 78.4868,
+        "timestamp": "2024-07-22T11:00:00",
+        "cluster_id": 0
+    },
+    {
+        "image_id": "img_03",
+        "lat": 17.3852,
+        "lon": 78.4869,
+        "timestamp": "2024-07-23T09:10:00",
+        "cluster_id": 0
+    },
+    {
+        "image_id": "img_04",
+        "lat": 17.401,
+        "lon": 78.499,
+        "timestamp": "2024-07-24T08:00:00",
+        "cluster_id": -1
+    }
+]
