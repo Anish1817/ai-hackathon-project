@@ -7,13 +7,13 @@ from .exif_utils import extract_metadata
 from .database import insert_image, fetch_all, init_db
 from member2.cluster import call_member2
 
-
 def process_folder(folder_path="member1/images"):
     if not os.path.exists(folder_path):
         print("Folder not found.")
         return
-    else :
+    else:
         print("found")
+
     files = os.listdir(folder_path)
 
     valid = 0
@@ -25,14 +25,30 @@ def process_folder(folder_path="member1/images"):
         if not file.lower().endswith((".jpg", ".jpeg", ".png")):
             continue
 
-        # metadata = extract_metadata(file_path)
+        print(f"\nProcessing: {file}")
+
+        # 1️⃣ Try EXIF first
         metadata = extract_metadata(file_path)
 
-        print(f"\nProcessing: {file}")
-        print("Metadata returned:", metadata)
+        # 2️⃣ If EXIF missing → Use Vision
         if not metadata:
+            from .vision_utils import get_location_from_image
+            location = get_location_from_image(file_path)
+
+            if location:
+                metadata = {
+                    "lat": location[0],
+                    "lon": location[1],
+                    "timestamp": None
+                }
+
+        # 3️⃣ If still no metadata → skip
+        if not metadata:
+            print("No GPS found (EXIF + Vision failed)")
             invalid += 1
             continue
+
+        print("Metadata returned:", metadata)
 
         result = {
             "image_id": file,
@@ -44,7 +60,7 @@ def process_folder(folder_path="member1/images"):
         insert_image(result)
         valid += 1
 
-    print(f"Processed: {valid + invalid}")
+    print(f"\nProcessed: {valid + invalid}")
     print(f"Valid: {valid}")
     print(f"Invalid: {invalid}")
 

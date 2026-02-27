@@ -112,5 +112,29 @@
         "lat": 17.545794699722222,
         "lon": 78.4035099,
         "timestamp": "2026-02-27T09:58:50"
+    },
+    {
+        "image_id": "WhatsApp Image 2026-02-27 at 7.51.00 PM.jpeg",
+        "lat": 27.175144799999998,
+        "lon": 78.04214219999999,
+        "timestamp": null
+    },
+    {
+        "image_id": "WhatsApp Image 2026-02-27 at 7.51.01 PM (1).jpeg",
+        "lat": 13.567286900000001,
+        "lon": 44.012983999999996,
+        "timestamp": null
+    },
+    {
+        "image_id": "WhatsApp Image 2026-02-27 at 7.51.01 PM.jpeg",
+        "lat": 17.383309,
+        "lon": 78.4010528,
+        "timestamp": null
+    },
+    {
+        "image_id": "WhatsApp Image 2026-02-27 at 7.51.02 PM.jpeg",
+        "lat": 18.9219841,
+        "lon": 72.8346543,
+        "timestamp": null
     }
 ]
