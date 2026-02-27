@@ -7,6 +7,7 @@ from pathlib import Path
 
 import folium
 import requests
+import polyline
 from folium.plugins import HeatMap
 
 
@@ -266,8 +267,8 @@ def build_road_following_path(points):
         return [[p["lat"], p["lon"]] for p in points]
 
     osrm_url = (
-        "https://routing.openstreetmap.de/routed-car/route/v1/driving/"
-        "{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
+        "http://router.project-osrm.org/route/v1/driving/"
+        "{lon1},{lat1};{lon2},{lat2}?overview=full"
     )
 
     # Small cache to avoid repeating calls for identical segments
@@ -299,13 +300,15 @@ def build_road_following_path(points):
                 resp = requests.get(url, timeout=8)
                 resp.raise_for_status()
                 data = resp.json()
-                coords = data["routes"][0]["geometry"]["coordinates"]  # [[lon, lat], ...]
-                segment = [[lat, lon] for lon, lat in coords]
-            except Exception:
+                geometry = data["routes"][0]["geometry"]
+                segment = polyline.decode(geometry) # Returns list of (lat, lon)
+                segment = [[lat, lon] for lat, lon in segment]
+            except Exception as e:
+                print(f"[OSRM WARNING]: Routing failed. Falling back to straight line. {e}")
                 segment = [[start["lat"], start["lon"]], [end["lat"], end["lon"]]]
             cache[k] = segment
 
-        if road_coords:
+        if road_coords and segment:
             segment = segment[1:]  # avoid duplicate join point
         road_coords.extend(segment)
 
@@ -391,73 +394,195 @@ def build_map(points, summary: dict):
     ).add_to(heat_group)
     heat_group.add_to(m)
 
-    # --- Layer Control ---
-    folium.LayerControl(collapsed=False).add_to(m)
-
-    # --- Animated Snake Route (fast + practical) ---
+    # --- Custom Floating Layer Control (Modern UI) ---
     map_name = m.get_name()
-    animated_js = f"""
+    path_js_name = path_group.get_name()
+    heat_js_name = heat_group.get_name()
+
+    custom_ui_html = f"""
+    <style>
+    /* Custom Map Panel UI */
+    #custom-map-btn {{
+        position: absolute; bottom: 20px; right: 20px; z-index: 9999;
+        background: #111; color: #00ffcc; border: 1px solid #333;
+        width: 44px; height: 44px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; cursor: pointer; transition: 0.2s;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5); font-size: 20px;
+    }}
+    #custom-map-btn:hover {{ border-color: #00ffcc; transform: scale(1.05); }}
+    
+    #custom-map-panel {{
+        position: absolute; bottom: 80px; right: 20px; z-index: 9999;
+        background: #111; border: 1px solid #333; border-radius: 16px;
+        padding: 24px; width: 280px; color: #fff; opacity: 0; pointer-events: none;
+        transform: translateY(20px); transition: all 0.3s ease; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }}
+    
+    .map-style-opt {{
+        display: flex; align-items: center; font-size: 13px; color: #ccc; 
+        margin-bottom: 8px; cursor: pointer; border: 1px solid transparent; 
+        padding: 10px; border-radius: 8px; transition: all 0.2s; background: #1a1a1a;
+    }}
+    .map-style-opt input {{ display: none; }}
+    .map-style-opt.selected {{ border-color: #00ffcc; background: #0d1a16; color: #fff; }}
+    .c-radio {{
+        width: 14px; height: 14px; border: 2px solid #555; border-radius: 50%; 
+        margin-right: 12px; display: inline-block; position: relative;
+        transition: all 0.2s;
+    }}
+    .map-style-opt.selected .c-radio {{ border-color: #00ffcc; }}
+    .map-style-opt.selected .c-radio:after {{
+        content: ""; position: absolute; width: 8px; height: 8px; background: #00ffcc;
+        border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    }}
+    
+    .switch {{ position: relative; display: inline-block; width: 34px; height: 20px; }}
+    .switch input {{ opacity: 0; width: 0; height: 0; }}
+    .slider {{ position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 34px; }}
+    .slider:before {{ position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: #888; transition: .4s; border-radius: 50%; }}
+    input:checked + .slider {{ background-color: #00ffcc; }}
+    input:checked + .slider:before {{ transform: translateX(14px); background-color: #111; }}
+    
+    /* Native controls overrides */
+    .leaflet-control-layers {{ display: none !important; }}
+    .leaflet-control-zoom {{ border: none !important; box-shadow: 0 4px 15px rgba(0,0,0,0.5) !important; margin-top: 20px !important; margin-left: 20px !important; }}
+    .leaflet-control-zoom-in, .leaflet-control-zoom-out {{ background: #111 !important; color: #fff !important; border-bottom: 1px solid #333 !important; text-decoration: none !important; }}
+    .leaflet-control-zoom-in:hover, .leaflet-control-zoom-out:hover {{ background: #222 !important; color: #00ffcc !important; }}
+    </style>
+    
+    <div id="custom-map-btn" onclick="toggleMapPanel()">🗺️</div>
+    
+    <div id="custom-map-panel">
+       <div style="font-size:10px; color:#555; letter-spacing:1px; margin-bottom:12px; text-transform:uppercase;">Map Style</div>
+       
+       <label class="map-style-opt selected" onclick="setMapStyle(event, 'Dark')">
+          <input type="radio" value="Dark" checked>
+          <span class="c-radio"></span> 🌍 Dark
+       </label>
+       <label class="map-style-opt" onclick="setMapStyle(event, 'Satellite')">
+          <input type="radio" value="Satellite">
+          <span class="c-radio"></span> 🛰️ Satellite
+       </label>
+       <label class="map-style-opt" onclick="setMapStyle(event, 'Street')">
+          <input type="radio" value="Street">
+          <span class="c-radio"></span> 🛣️ Street
+       </label>
+
+       <div style="font-size:10px; color:#555; letter-spacing:1px; margin-top:24px; margin-bottom:12px; text-transform:uppercase;">Overlays</div>
+       
+       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; font-size:13px; color:#ccc;">
+           <span>📍 Movement Path</span>
+           <label class="switch">
+              <input type="checkbox" id="toggle-path" checked onchange="toggleOverlay('path', this.checked)">
+              <span class="slider"></span>
+           </label>
+       </div>
+       <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; color:#ccc;">
+           <span>🔥 Heatmap</span>
+           <label class="switch">
+              <input type="checkbox" id="toggle-heat" onchange="toggleOverlay('heat', this.checked)">
+              <span class="slider"></span>
+           </label>
+       </div>
+    </div>
+    
     <script>
+    var panelOpen = false;
+    function toggleMapPanel() {{
+        var p = document.getElementById('custom-map-panel');
+        var b = document.getElementById('custom-map-btn');
+        panelOpen = !panelOpen;
+        if(panelOpen) {{
+            p.style.opacity = '1'; p.style.pointerEvents = 'auto'; p.style.transform = 'translateY(0)';
+            b.style.borderColor = '#00ffcc'; b.style.boxShadow = '0 0 15px rgba(0,255,204,0.3)';
+        }} else {{
+            p.style.opacity = '0'; p.style.pointerEvents = 'none'; p.style.transform = 'translateY(20px)';
+            b.style.borderColor = '#333'; b.style.boxShadow = '0 4px 15px rgba(0,0,0,0.5)';
+        }}
+    }}
+    
+    var mapTiles = {{
+        'Dark': L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{ attribution: '&copy; CartoDB', maxZoom: 19 }}),
+        'Satellite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}', {{ attribution: '&copy; Esri', maxZoom: 19 }}),
+        'Street': L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{ attribution: '&copy; OpenStreetMap', maxZoom: 19 }})
+    }};
+    
     document.addEventListener('DOMContentLoaded', function() {{
         setTimeout(function() {{
-            var map = window["{map_name}"];
+            var foliumMap = window["{map_name}"];
+            window.myMap = foliumMap;
+            var pathG = window["{path_js_name}"];
+            var heatG = window["{heat_js_name}"];
+            window.overlays = {{ 'path': pathG, 'heat': heatG }};
+            
+            // Folium adds dark_matter by default. 
+            window.currentTile = null;
+            foliumMap.eachLayer(function(l) {{
+                if (l instanceof L.TileLayer) {{
+                    window.currentTile = l;
+                }}
+            }});
+            
+            window.setMapStyle = function(event, name) {{
+                document.querySelectorAll('.map-style-opt').forEach(el => {{
+                    el.classList.remove('selected');
+                    el.querySelector('input').checked = false;
+                }});
+                var t = event.currentTarget || event.target.closest('.map-style-opt');
+                t.classList.add('selected');
+                t.querySelector('input').checked = true;
+                
+                if (window.currentTile) foliumMap.removeLayer(window.currentTile);
+                window.currentTile = mapTiles[name];
+                window.currentTile.addTo(foliumMap);
+                
+                // Keep overlays above the new tile layer
+                if (document.getElementById('toggle-path').checked) {{ foliumMap.removeLayer(pathG); foliumMap.addLayer(pathG); }}
+                if (document.getElementById('toggle-heat').checked) {{ foliumMap.removeLayer(heatG); foliumMap.addLayer(heatG); }}
+            }};
+            
+            window.toggleOverlay = function(name, show) {{
+                var l = window.overlays[name];
+                if (show) window.myMap.addLayer(l);
+                else window.myMap.removeLayer(l);
+            }};
+            
+            // --- Animated Snake Route ---
             var rawCoords = {road_coords};
-
-            var MAX_POINTS = 700;
-            var FRAME_DELAY_MS = 8;
-
             function downsample(coords, maxPoints) {{
                 if (!coords || coords.length <= maxPoints) return coords;
                 var step = Math.ceil(coords.length / maxPoints);
                 var out = [];
-                for (var i = 0; i < coords.length; i += step) {{
-                    out.push(coords[i]);
-                }}
+                for (var i = 0; i < coords.length; i += step) out.push(coords[i]);
                 var last = coords[coords.length - 1];
                 var tail = out[out.length - 1];
-                if (!tail || tail[0] !== last[0] || tail[1] !== last[1]) {{
-                    out.push(last);
-                }}
+                if (!tail || tail[0] !== last[0] || tail[1] !== last[1]) out.push(last);
                 return out;
             }}
-
-            var coords = downsample(rawCoords, MAX_POINTS);
-            if (!coords || coords.length < 2) return;
-
-            var index = 0;
-            var drawnCoords = [coords[0]];
-
-            var animatedLine = L.polyline(drawnCoords, {{
-                color: '#00ffcc',
-                weight: 3,
-                opacity: 0.9
-            }}).addTo(map);
-
-            var movingDot = L.circleMarker(coords[0], {{
-                radius: 6,
-                color: '#00ffcc',
-                fillColor: '#ffffff',
-                fillOpacity: 1
-            }}).addTo(map);
-
-            function animateRoute() {{
-                if (index < coords.length - 1) {{
-                    index++;
-                    drawnCoords.push(coords[index]);
-                    animatedLine.setLatLngs(drawnCoords);
-                    movingDot.setLatLng(coords[index]);
-                    setTimeout(animateRoute, FRAME_DELAY_MS);
-                }} else {{
-                    map.removeLayer(movingDot);
+            var arr = downsample(rawCoords, 700);
+            if(arr && arr.length >= 2) {{
+                var M_idx = 0;
+                var drawn = [arr[0]];
+                var animLine = L.polyline(drawn, {{color:'#00ffcc', weight:3, opacity:0.9}}).addTo(foliumMap);
+                var mDot = L.circleMarker(arr[0], {{radius:6, color:'#00ffcc', fillColor:'#fff', fillOpacity:1}}).addTo(foliumMap);
+                function loop() {{
+                    if(M_idx < arr.length - 1) {{
+                        M_idx++;
+                        drawn.push(arr[M_idx]);
+                        animLine.setLatLngs(drawn);
+                        mDot.setLatLng(arr[M_idx]);
+                        setTimeout(loop, 8);
+                    }} else {{ foliumMap.removeLayer(mDot); }}
                 }}
+                loop();
             }}
-
-            animateRoute();
-        }}, 1500);
+            
+        }}, 800);
     }});
     </script>
     """
-    m.get_root().html.add_child(folium.Element(animated_js))
+    m.get_root().html.add_child(folium.Element(custom_ui_html))
     return m
 
 
